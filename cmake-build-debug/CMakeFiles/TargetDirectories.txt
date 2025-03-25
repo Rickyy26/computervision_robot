@@ -1,0 +1,3 @@
+C:/Users/Ricky/Desktop/-/School/W25/MECH 472/project/my project/code/cmake-build-debug/CMakeFiles/code.dir
+C:/Users/Ricky/Desktop/-/School/W25/MECH 472/project/my project/code/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/Ricky/Desktop/-/School/W25/MECH 472/project/my project/code/cmake-build-debug/CMakeFiles/rebuild_cache.dir
