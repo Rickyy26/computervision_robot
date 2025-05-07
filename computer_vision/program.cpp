@@ -62,10 +62,12 @@ int get_opponent_back_centroid(double& front_x, double& front_y, double& back_x,
 bool check_collision(double front_x, double front_y, double back_x, double back_y, double L, double W, const double* obstacle_x, const double* obstacle_y, const double* obstacle_r, int N_OBS);
 bool has_line_of_sight(double x1, double y1, double x2, double y2);
 void sobel_edge_detection(const image& input, image& output);
-int get_obstacles(double* x_vals, double* y_vals, int n_obs);
+int get_obstacles(double* x_vals, double* y_vals, double* r_vals, int n_obs);
 double normalize_angle(double angle);
 int get_front_centroid_sim(double& front_x, double& front_y);
 int get_back_centroid_sim(double& back_x, double& back_y);
+int get_obstacles_sim(double* x_vals, double* y_vals, int n_obs);
+
 
 // declare some global image structures (globals are bad, but easy)
 image a,b,rgb1;
@@ -161,8 +163,8 @@ int run_test() {
 		{220.0, 0.07, 0.2, 120.0, 0.1, 0.1}
 	};
 
-	load_rgb_image("screenshot2.bmp", rgb1);
-	view_rgb_image(rgb1);
+	load_rgb_image("output.bmp", rgb0);
+	view_rgb_image(rgb0);
 	cout << "\ntest image rgb";
 	pause();
 	/*
@@ -178,10 +180,9 @@ int run_test() {
 	pause();
 	*/
 	
-	get_obstacles(x_obs, y_obs, N_OBS);
-	for (int i = 0; i < N_OBS; i++) {
-		//draw_point_rgb(rgb1, (int)x_obs[i], (int)y_obs[i], 255, 0, 0);
-	}
+	//get_obstacles_sim(x_obs, y_obs, 2);
+	label_objects(tvalue);
+	copy(a, rgb1);
 	view_rgb_image(rgb1);
 	//sobel edge detection
 	///*
@@ -275,111 +276,141 @@ int run_sim() {
 	max_speed = 100; // max wheel speed of robot (pixels/s)
 	opponent_max_speed = 100;
 
-	set_inputs(pw_l, pw_r, pw_laser, laser, max_speed);
+set_inputs(pw_l, pw_r, pw_laser, laser, max_speed);
 
-	// opponent inputs
-	pw_l_o = 0; // pulse width for left wheel servo (us)
-	pw_r_o = 0; // pulse width for right wheel servo (us)
-	pw_laser_o = 1500; // pulse width for laser servo (us)
-	laser_o = 0; // laser input (0 - off, 1 - fire)
+// opponent inputs
+pw_l_o = 0; // pulse width for left wheel servo (us)
+pw_r_o = 0; // pulse width for right wheel servo (us)
+pw_laser_o = 1500; // pulse width for laser servo (us)
+laser_o = 0; // laser input (0 - off, 1 - fire)
+
+// manually set opponent inputs for the simulation
+// -- good for testing your program
+set_opponent_inputs(pw_l_o, pw_r_o, pw_laser_o, laser_o,
+	opponent_max_speed);
+
+activate();
+
+tc0 = high_resolution_time();
+double dpw = 500;
+opp_x = 150;
+opp_y = 375;
+//-------------------------------------------------------------------------------//
+front_x, front_y, back_x, back_y = 0.0;
+double ic = 200.0, jc = 300.0;
+// initial simulation setup
+acquire_image_sim(rgb1);
+
+get_front_centroid_sim(front_x, front_y);
+get_back_centroid_sim(back_x, back_y);
+get_obstacles(x_obs, y_obs, obs_r, N_obs);
+
+while (1) {
+
+	//		update_background();
+	//		update_obstacles();
+
+			// simulates the robots and acquires the image from simulation
+	acquire_image_sim(rgb0);
+
+	//		update_image(rgb);
+
+	tc = high_resolution_time() - tc0;
+
+	// fire laser
+
+	// change the inputs to move the robot around
+
+	// pw_l -- pulse width of left servo (us) (from 1000 to 2000)
+	// pw_r -- pulse width of right servo (us) (from 1000 to 2000)
+	// pw_laser -- pulse width of laser servo (us) (from 1000 to 2000)
+	// -- 1000 -> -90 deg
+	// -- 1500 -> 0 deg
+	// -- 2000 -> 90 deg
+	// laser -- (0 - laser off, 1 - fire laser for 3 s)
+	// max_speed -- pixels/s for right and left wheels
+
+
+	//handle_keyboard_input(dpw, pw_l_o, pw_r_o);
 
 	// manually set opponent inputs for the simulation
 	// -- good for testing your program
+
+	set_inputs(pw_l_o, pw_r_o, pw_laser_o, laser_o, max_speed);
+
 	set_opponent_inputs(pw_l_o, pw_r_o, pw_laser_o, laser_o,
 		opponent_max_speed);
 
-	activate();
+	// * v_mode is an optional argument for view_rgb_image(...)
+	// - adjusting it might improve performance / reduce delays
+	// -- see "image_transfer.h" for more details
+	v_mode = 1;
 
-	tc0 = high_resolution_time();
-	double dpw = 500;
-	opp_x = 150;
-	opp_y = 375;
-	//-------------------------------------------------------------------------------//
-	front_x, front_y, back_x, back_y = 0.0;
-	double ic = 200.0, jc = 300.0;
-	// initial simulation setup
-	acquire_image_sim(rgb1);
+	track_object(nlabel, front_x, front_y);
+	track_object(nlabel, back_x, back_y);
+	theta = get_orientation(front_x, front_y, back_x, back_y);
+	for (int i = 0; i < N_obs; i++) {
+		draw_point_rgb(rgb0, (int)x_obs[i], (int)y_obs[i], 255, 0, 0);
+	}
+	draw_point_rgb(rgb0, (int)opp_x, (int)opp_y, 0, 255, 0);
 
-	get_front_centroid_sim(front_x, front_y);
-	get_back_centroid_sim(back_x, back_y);
-	get_obstacles(x_obs, y_obs, N_obs);
+	//get direction to opponent
+	double robot_x = (front_x + back_x) / 2.0;
+	double robot_y = (front_y + back_y) / 2.0;
 
-	while (1) {
+	double dx = opp_x - front_x;
+	double dy = opp_y - front_y;
 
-		//		update_background();
-		//		update_obstacles();
+	double repulse_x = 0, repulse_y = 0;
+	for (int i = 0; i < N_obs; ++i) {
+		double ox = x_obs[i], oy = y_obs[i];
+		double odx = ox - front_x;
+		double ody = oy - front_y;
+		double dist2 = odx * odx + ody * ody;
 
-				// simulates the robots and acquires the image from simulation
-		acquire_image_sim(rgb0);
-
-		//		update_image(rgb);
-
-		tc = high_resolution_time() - tc0;
-
-		// fire laser
-
-		// change the inputs to move the robot around
-
-		// pw_l -- pulse width of left servo (us) (from 1000 to 2000)
-		// pw_r -- pulse width of right servo (us) (from 1000 to 2000)
-		// pw_laser -- pulse width of laser servo (us) (from 1000 to 2000)
-		// -- 1000 -> -90 deg
-		// -- 1500 -> 0 deg
-		// -- 2000 -> 90 deg
-		// laser -- (0 - laser off, 1 - fire laser for 3 s)
-		// max_speed -- pixels/s for right and left wheels
-
-
-		//handle_keyboard_input(dpw, pw_l_o, pw_r_o);
-
-		// manually set opponent inputs for the simulation
-		// -- good for testing your program
-
-		set_inputs(pw_l_o, pw_r_o, pw_laser_o, laser_o, max_speed);
-
-		set_opponent_inputs(pw_l_o, pw_r_o, pw_laser_o, laser_o,
-			opponent_max_speed);
-
-		// * v_mode is an optional argument for view_rgb_image(...)
-		// - adjusting it might improve performance / reduce delays
-		// -- see "image_transfer.h" for more details
-		v_mode = 1;
-		
-		track_object(nlabel, front_x, front_y);
-		track_object(nlabel, back_x, back_y);
-		theta = get_orientation(front_x, front_y, back_x, back_y);
-		for (int i = 0; i < N_obs; i++) {
-			draw_point_rgb(rgb0, (int)x_obs[i], (int)y_obs[i], 255, 0, 0);
+		if (dist2 < 15000) { //radius squared
+			double scale = 10000 / dist2;
+			repulse_x += scale * odx;
+			repulse_y += scale * ody;
 		}
-		draw_point_rgb(rgb0, (int)opp_x, (int)opp_y, 0, 255, 0);
-		
-		//get direction to opponent
-		double robot_x = (front_x + back_x) / 2.0;
-		double robot_y = (front_y + back_y) / 2.0;
+	}
+	double dist_left = front_x - 0.0;
+	if (dist_left > 1.0) {
+		double scale = 10000.0 / (dist_left*dist_left);
+		repulse_x += scale; //push rightt positive x
+	}
+	double dist_right = 640.0- front_x;
+	if (dist_left > 1.0) {
+		double scale = 10000.0 / (dist_right * dist_right);
+		repulse_x -= scale; // push left negative x
+	}
+	double dist_top = front_y - 0.0;
+	if (dist_top > 1.0) {
+		double scale = 10000.0 / (dist_top * dist_top);
+		repulse_y += scale; // push down positive y
+	}
+	double dist_bottom = 480.0 - front_y;
+	if (dist_bottom > 1.0) {
+		double scale = 10000.0 / (dist_bottom * dist_bottom);
+		repulse_y -= scale; // push up negative y
+	}
 
-		double dx = opp_x - front_x;
-		double dy = opp_y - front_y;
-
-		double repulse_x = 0, repulse_y = 0;
-		for (int i = 0; i < N_obs; ++i) {
-			double ox = x_obs[i], oy = y_obs[i];
-			double odx = ox - front_x;
-			double ody = oy - front_y;
-			double dist2 = odx * odx + ody * ody;
-
-			if (dist2 < 3000) { //radius squared
-				double scale = 6.0 / dist2;
-				repulse_x += scale * odx;
-				repulse_y += scale * ody;
-			}
-		}
 
 		double goal_theta = atan2(dy + repulse_y, dx + repulse_x);
 		double angle_diff = normalize_angle(goal_theta - theta);
 
-		if (fabs(angle_diff) < 0.2) { pw_l_o = 1500 - dpw; pw_r_o = 1500 + dpw; }//move straight
-		else if (angle_diff > 0) { pw_l_o = 1500 + dpw; pw_r_o = 1500 + dpw; }//rotate left
-		else { pw_l_o = 1500 - dpw; pw_r_o = 1500 - dpw; }//rotate right
+		if (fabs(angle_diff) < 0.2) { 
+			pw_l_o = 1500 - dpw;
+			pw_r_o = 1500 + dpw; 
+		}//move straight
+		else if (angle_diff > 0) { 
+			pw_l_o = 1500 + dpw; 
+			pw_r_o = 1500 + dpw; 
+		}//rotate left
+		else { 
+			pw_l_o = 1500 - dpw; 
+			pw_r_o = 1500 - dpw; 
+		}//rotate right
 
 		/*
 		cout << "\rFront x: " << front_x
@@ -389,12 +420,25 @@ int run_sim() {
 			<< " Theta: " << theta
 			<< flush;
 		*/
+		/*
 		if (check_collision(front_x, front_y, back_x, back_y, sim_robot_length, sim_robot_width, x_obs, y_obs, r_obs, N_obs)) {
 			cout << "\rCollision detected!" << flush;
 		}
 		else {
 			cout << "\rNo Collision detected!" << flush;
 		}
+		*/
+		//check line of sight
+
+		double angle_to_opp = atan2(dy, dx);
+		double normalized_angle_opp = normalize_angle(angle_to_opp);
+		if (normalized_angle_opp < 0.2) {
+			cout << "\rFacing opponent   " << flush;
+		}
+		else {
+			cout << "\rNot Facing opponent" << flush;
+		}
+		//*/
 		view_rgb_image(rgb0, v_mode);
 
 		if (KEY('X')) break;
@@ -405,7 +449,7 @@ int run_sim() {
 		// -- it seems laptops tend to go into low CPU mode
 		// when Sleep is called, which slows down the simulation
 		// more than the requested sleep time
-		Sleep(5); // 100 fps max
+		//Sleep(5); // 100 fps max
 	}
 
 	return 0;
@@ -448,7 +492,7 @@ int run_vision() {
 	double obs_x[N_OBS] = { 0.0 }, obs_y[N_OBS] = { 0.0 }, obs_r[N_OBS] = { 0.0 };
 	cout << "\n";
 	
-	get_obstacles(obs_x, obs_y, N_OBS);
+	get_obstacles(obs_x, obs_y, obs_r, N_OBS);
 	for (int i = 0; i < N_OBS; i++) {
 		draw_point_rgb(rgb1, obs_x[i], obs_y[i], 0, 255, 0);
 	}
@@ -479,18 +523,20 @@ int run_vision() {
 
 	
 		//GET OBSTACLES
-		//get_obstacles(obs_x, obs_y, N_OBS);
+		get_obstacles(obs_x, obs_y, obs_r, N_OBS);
 		for (int i = 0; i < N_OBS; i++) {
-			track_object(nlabel, obs_x[i], obs_y[i]);
+			//track_object(nlabel, obs_x[i], obs_y[i]);
 			draw_point_rgb(rgb1, obs_x[i], obs_y[i], 0, 255, 0);
 		}
+
+		
 
 		//AVOID COLLISIONs
 		bool avoid = check_collision(fx, fy, bx, by, sim_robot_length*0.5, sim_robot_width*0.5, obs_x, obs_y, obs_r, N_OBS);
 
-		DriveCmd cmd = decide_cmd(fx, fy, bx, by, ofx, ofy, obx, oby, theta); //add ox, oy, obx, oby for opponent but 0 for now
+		DriveCmd cmd = decide_cmd(fx, fy, bx, by, ofx, ofy, obx, oby, theta, obs_x, obs_y, obs_r, N_OBS); 
 
-		//send_cmd(cmd);
+		send_cmd(cmd);
 
 		
 		view_rgb_image(rgb1);
@@ -882,7 +928,7 @@ int get_front_centroid(double &front_x, double &front_y) {
 
 int get_back_centroid(double& front_x, double& front_y, double& back_x, double& back_y) {
 	HSVFilter filter[] = { 
-		{ 10.0, 0.65, 0.625, 8, 0.35, 0.375 }, //10, 0.65, 0.5, 8, 0.3, 0.35
+		{ 10.0, 0.65, 0.625, 10, 0.35, 0.375 }, //10, 0.65, 0.5, 8, 0.3, 0.35
 		{350, 0.65, 0.625, 10, 0.35, 0.375} //350, 0.65, 0.5, 10, 0.2, 0.35
 	};
 	filter_colors(rgb1, rgb0, filter, 2);  // RED
@@ -941,7 +987,7 @@ int get_opponent_front_centroid(double &front_x, double &front_y)
 
 int get_opponent_back_centroid(double &front_x, double &front_y, double &back_x, double &back_y)
 {
-	HSVFilter filter[] = { 220.0, 0.6, 0.625, 30.0, 0.2, 0.375 }; //BLUE
+	HSVFilter filter[] = { 220.0, 0.6, 0.625, 30.0, 0.3, 0.375 }; //BLUE
 	filter_colors(rgb1, rgb0, filter, 1);
 	/*int nlabels = label_objects(tvalue);
 	int area;
@@ -1043,8 +1089,9 @@ bool has_line_of_sight(double x1, double y1, double x2, double y2) {
 	ibyte* pdata = (ibyte*)label.pdata;
 	int width = label.width;
 	int height = label.height;
+	const int margin_steps = 50;
 
-	for (int i = 0; i <= steps; ++i) {
+	for (int i = 0; i <= steps -  margin_steps; ++i) {
 		int xi = static_cast<int>(x1 + i * dx + 0.5);
 		int yi = static_cast<int>(y1 + i * dy + 0.5);
 
@@ -1100,7 +1147,7 @@ void sobel_edge_detection(const image& input, image& output) {
 	}
 }
 
-int get_obstacles(double* x_vals, double* y_vals, int n_obs) {
+int get_obstacles(double* x_vals, double* y_vals, double* r_vals, int n_obs) {
 	
 	HSVFilter filters[] = {
 		{ 153.0, 0.5, 0.35, 20.0, 0.2, 0.2 },//green
@@ -1114,25 +1161,71 @@ int get_obstacles(double* x_vals, double* y_vals, int n_obs) {
 		{ 180.0, 0.5, 0.075, 180.0, 0.5, 0.075 }//black
 	};
 	filter_colors(rgb1, rgb0, filters, 8);
-
+	//view_rgb_image(rgb0);
+	//pause();
 
 	int nlabels = label_objects(150);
 	int area;
-	//const int min_area = 700; // Minimum area for an obstacle to be considered
-
-	/*for (int L = 1; L <= nlabels; ++L) {
-		int A = object_area(label, L);
-		if (A < threshold_area_size) {
-			continue; // Skip small areas
-		}
-	}*/
 
 	int top_labels[50] = { 0 };
 	int top_areas[50] = { 0 };
 
 	for (int i = 0; i < nlabels; i++) {
 		area = object_area(label, i+1);
-		cout << "kept obstacle:" << i+1 << " area: " << area << endl;
+		for (int j = 0; j < n_obs; j++) {
+			if (area > top_areas[j]) {
+				// Shift down smaller values
+				for (int k = n_obs - 1; k > j; k--) {
+					top_areas[k] = top_areas[k - 1];
+					top_labels[k] = top_labels[k - 1];
+				}
+				top_areas[j] = area;
+				top_labels[j] = i + 1;
+				break;
+			}
+		}
+	}
+
+	constexpr double safety_margin = 20.0; // pixels, adjust as needed
+
+	for (int i = 0; i < n_obs; i++) {
+		if (top_labels[i] == 0) { // used to be -1
+			x_vals[i] = -1; 
+			y_vals[i] = -1;
+			r_vals[i] = -1;
+			continue;
+		}
+		double ic, jc;
+		centroid(a, label, top_labels[i], ic, jc);
+		double r = std::sqrt(top_areas[i] / 3.14159) + safety_margin;
+		draw_point_rgb(rgb1, int(ic), int(jc), 0, 255, 0);
+		x_vals[i] = ic;
+		y_vals[i] = jc;
+		r_vals[i] = r;
+	}
+
+	return 0;
+}
+
+int get_obstacles_sim(double* x_vals, double* y_vals, int n_obs) {
+
+	HSVFilter filters[] = {
+		{ 150.0, 0.5, 0.55, 20.0, 0.2, 0.25 },//green
+		{ 10.0, 0.65, 0.625, 8, 0.35, 0.375 },//red
+		{ 30, 0.55, 0.65, 10, 0.35, 0.35},//orange
+		{ 200.0, 0.6, 0.6, 10.0, 0.30, 0.30 },//blue
+		{ 180.0, 0.10, 0.15, 180.0, 0.1, 0.15 }//black
+	};
+	filter_colors(rgb1, rgb0, filters, 5);
+
+	int nlabels = label_objects(150);
+	int area;
+
+	int top_labels[50] = { 0 };
+	int top_areas[50] = { 0 };
+
+	for (int i = 0; i < nlabels; i++) {
+		area = object_area(label, i + 1);
 		for (int j = 0; j < n_obs; j++) {
 			if (area > top_areas[j]) {
 				// Shift down smaller values
@@ -1149,14 +1242,13 @@ int get_obstacles(double* x_vals, double* y_vals, int n_obs) {
 
 	for (int i = 0; i < n_obs; i++) {
 		if (top_labels[i] == -1) {
-			x_vals[i] = -1; 
+			x_vals[i] = -1;
 			y_vals[i] = -1;
 			continue;
 		}
 		double ic, jc;
 		centroid(a, label, top_labels[i], ic, jc);
 		draw_point_rgb(rgb1, int(ic), int(jc), 0, 255, 0);
-		cout << "Obstacle:" << top_labels[i] << " area: " << top_areas[i] << endl;
 		x_vals[i] = ic;
 		y_vals[i] = jc;
 	}
